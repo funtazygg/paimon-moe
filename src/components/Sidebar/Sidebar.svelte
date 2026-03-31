@@ -95,6 +95,13 @@
       label={$t('sidebar.todoList')}
       href="/todo"
     />
+    <SidebarItem
+      on:clicked={close}
+      active={segment === 'inventory'}
+      image="/images/items.png"
+      label={$t('sidebar.inventory')}
+      href="/inventory"
+    />
     <SidebarMoreItem
       {mobile}
       {segment}

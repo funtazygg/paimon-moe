@@ -19,6 +19,8 @@
   import { showSidebar } from '../stores/sidebar';
   import { checkLocalSave } from '../stores/saveManager';
   import TodoData from '../components/TodoData.svelte';
+  import GoodInventoryData from '../components/GoodInventoryData.svelte';
+  import MaterialInventoryData from '../components/MaterialInventoryData.svelte';
   import SettingData from '../components/SettingData.svelte';
   import Toast from '../components/Toast.svelte';
   import Icon from '../components/Icon.svelte';
@@ -79,6 +81,8 @@
   {/if}
   <DataSync>
     <TodoData />
+    <GoodInventoryData />
+    <MaterialInventoryData />
     <SettingData />
     <Toast />
     <main style="flex: 1 0 auto;">

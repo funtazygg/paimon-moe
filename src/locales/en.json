@@ -9,6 +9,7 @@
     "achievement": "Achievements",
     "reminder": "Reminder",
     "todoList": "Todo List",
+    "inventory": "Inventory",
     "timeline": "Timeline",
     "furnishing": "Furnishing",
     "weapons": "Weapons",
@@ -652,6 +653,7 @@
     "empty": ["Nothing to do yet 😀", "Add some from the Items page or the Calculator!"],
     "farmableToday": "Farmable Today",
     "resin": "Resin needed",
+    "inInventory": "In inventory",
     "based": "Based on AR:{ar} and WL:{wl}",
     "change": "(change on settings)",
     "approximation": "Approximation calculated from drop rates by",
@@ -659,6 +661,50 @@
       "title": "Delete this todo?",
       "cancel": "Cancel",
       "delete": "Delete"
+    }
+  },
+  "inventoryPage": {
+    "title": "Inventory",
+    "subtitle": "Import your GOOD data and use material counts directly in Todo.",
+    "openButton": "Inventory",
+    "viewModes": {
+      "list": "List",
+      "grid": "Grid"
+    },
+    "tabs": {
+      "artifacts": "Artifacts",
+      "weapons": "Weapons",
+      "materials": "Materials"
+    },
+    "todoTitle": "TODO",
+    "todoSubtitle": "Artifacts and Weapons tabs will be added next.",
+    "importTitle": "GOOD Import",
+    "importSubtitle": "Import materials from a GOOD JSON file.",
+    "selectFile": "Select GOOD file",
+    "importButton": "Import",
+    "importSuccess": "GOOD imported: {imported} items, {unmapped} custom names",
+    "importError": "Failed to import GOOD",
+    "importStats": "Source: {source}, version: {version}, imported: {imported}, custom: {unmapped}",
+    "manualTitle": "Manual Edit",
+    "searchPlaceholder": "Search item by name or id",
+    "material": "Material",
+    "required": "Required (Todo)",
+    "inInventory": "In inventory",
+    "remaining": "Remaining",
+    "pin": "Pin",
+    "edit": "Edit",
+    "empty": "No materials to show yet.",
+    "weaponFilters": {
+      "type": "Weapon type",
+      "rarity": "Weapon rarity",
+      "all": "All",
+      "sword": "Sword",
+      "claymore": "Claymore",
+      "polearm": "Polearm",
+      "bow": "Bow",
+      "catalyst": "Catalyst",
+      "fiveStar": "5★",
+      "fourStar": "4★"
     }
   },
   "timeline": {
@@ -728,6 +774,7 @@
     "exportButton": "Export & Import Data",
     "export": "Export Data",
     "download": "Download Data",
+    "downloadGood": "Download GOOD",
     "import": "Import Data",
     "selectFile": "Select JSON File",
     "exportInfo": "Download a copy of all your data saved in Paimon.moe",

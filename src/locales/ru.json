@@ -9,6 +9,7 @@
     "achievement": "Достижения",
     "reminder": "Напоминание",
     "todoList": "Список дел",
+    "inventory": "Инвентарь",
     "timeline": "Лента событий",
     "furnishing": "Мебель",
     "weapons": "Оружие",
@@ -682,6 +683,7 @@
     ],
     "farmableToday": "Можно фармить сегодня",
     "resin": "Смолы необходимо",
+    "inInventory": "В инвентаре",
     "based": "Основываясь на {ar} ранге приключений и {wl} уровне мира",
     "change": "(меняется в настройках)",
     "approximation": "Рассчитано примерно на основе шанса выпадения от",
@@ -689,6 +691,50 @@
       "title": "Удалить этот список?",
       "cancel": "Отмена",
       "delete": "Удалить"
+    }
+  },
+  "inventoryPage": {
+    "title": "Инвентарь",
+    "subtitle": "Импортируйте GOOD и используйте материалы напрямую в списке дел.",
+    "openButton": "Инвентарь",
+    "viewModes": {
+      "list": "Список",
+      "grid": "Плитка"
+    },
+    "tabs": {
+      "artifacts": "Артефакты",
+      "weapons": "Оружие",
+      "materials": "Материалы"
+    },
+    "todoTitle": "TODO",
+    "todoSubtitle": "Вкладки Артефакты и Оружие добавим позже.",
+    "importTitle": "Импорт GOOD",
+    "importSubtitle": "Импорт материалов из GOOD JSON файла.",
+    "selectFile": "Выбрать GOOD файл",
+    "importButton": "Импорт",
+    "importSuccess": "GOOD импортирован: {imported} материалов, {unmapped} пользовательских названий",
+    "importError": "Не удалось импортировать GOOD",
+    "importStats": "Источник: {source}, версия: {version}, импортировано: {imported}, пользовательских: {unmapped}",
+    "manualTitle": "Ручное изменение",
+    "searchPlaceholder": "Поиск предмета по имени или id",
+    "material": "Материал",
+    "required": "Нужно (Todo)",
+    "inInventory": "В инвентаре",
+    "remaining": "Осталось",
+    "pin": "Закрепить",
+    "edit": "Изменить",
+    "empty": "Пока нет материалов для отображения.",
+    "weaponFilters": {
+      "type": "Тип оружия",
+      "rarity": "Редкость оружия",
+      "all": "Все",
+      "sword": "Одноручный меч",
+      "claymore": "Двуручный меч",
+      "polearm": "Копьё",
+      "bow": "Лук",
+      "catalyst": "Катализатор",
+      "fiveStar": "5★",
+      "fourStar": "4★"
     }
   },
   "timeline": {
@@ -758,6 +804,7 @@
     "exportButton": "Экспорт и импорт данных",
     "export": "Экспорт данных",
     "download": "Скачать данные",
+    "downloadGood": "Скачать GOOD",
     "import": "Импорт данных",
     "selectFile": "Выберите JSON файл",
     "exportInfo": "Скачать копию всех ваших данных, сохраненных в Paimon.moe",

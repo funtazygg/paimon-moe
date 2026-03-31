@@ -21,6 +21,7 @@
   import { submitWishTally } from '../functions/wishTally';
   import Select from './Select.svelte';
   import { server } from '../stores/server';
+  import ruItemNames from '../locales/items/ru.json';
 
   export let processFirstTimePopup;
   export let closeModal;
@@ -75,6 +76,8 @@
   let region = '';
   let currentBanner = '';
   let currentPage = 1;
+  let weaponNameLookup = {};
+  let characterNameLookup = {};
 
   function cancel() {
     fetchController.abort();
@@ -127,6 +130,19 @@
       }
     } catch (err) {
       pushToast($t('wish.import.invalidLink'), 'error');
+      processingLog = false;
+      return;
+    }
+
+    if (isJsonWishLink(genshinLink)) {
+      try {
+        await importFromWishJsonLink(genshinLink);
+        finishedProcessingLog = true;
+      } catch (err) {
+        console.log(err);
+        resetImportState();
+      }
+      return;
     }
 
     try {
@@ -139,16 +155,185 @@
       finishedProcessingLog = true;
     } catch (err) {
       console.log(err);
+      resetImportState();
+    }
+  }
 
-      wishes = {};
+  function resetImportState() {
+    wishes = {};
+    processingLog = false;
+    fetchingWishes = false;
+    finishedProcessingLog = false;
+    calculatingPity = false;
+
+    region = '';
+    currentBanner = '';
+    currentPage = 1;
+  }
+
+  function normalizeWishText(value) {
+    if (typeof value !== 'string') return '';
+    return value.toLowerCase().replace(/[^a-zа-яё0-9]/gi, '');
+  }
+
+  function addWishLookup(collection, key, id) {
+    const normalized = normalizeWishText(key);
+    if (!normalized) return;
+    if (!collection[normalized]) {
+      collection[normalized] = id;
+    }
+  }
+
+  function buildWishNameLookups() {
+    const nextWeaponLookup = {};
+    const nextCharacterLookup = {};
+
+    for (const [id, weapon] of Object.entries(weaponList)) {
+      addWishLookup(nextWeaponLookup, weapon.name, id);
+      addWishLookup(nextWeaponLookup, $t(weapon.name), id);
+      addWishLookup(nextWeaponLookup, ruItemNames[weapon.name], id);
+    }
+
+    for (const [id, char] of Object.entries(characters)) {
+      addWishLookup(nextCharacterLookup, char.name, id);
+      addWishLookup(nextCharacterLookup, $t(char.name), id);
+      addWishLookup(nextCharacterLookup, ruItemNames[char.name], id);
+    }
+
+    weaponNameLookup = nextWeaponLookup;
+    characterNameLookup = nextCharacterLookup;
+  }
+
+  function isJsonWishLink(link) {
+    if (typeof link !== 'string') return false;
+    return /\.json(?:[?#].*)?$/i.test(link.trim());
+  }
+
+  function getCorsProxyUrl() {
+    const base = import.meta.env.VITE_API_HOST;
+    if (typeof base === 'string' && base.trim().length > 0) {
+      return `${base.replace(/\/$/, '')}/corsproxy`;
+    }
+    return '/corsproxy';
+  }
+
+  function detectWishType(rawType, name) {
+    const normalizedType = normalizeWishText(rawType);
+    const normalizedName = normalizeWishText(name);
+
+    if (
+      normalizedType.includes('weapon') ||
+      normalizedType.includes('оруж') ||
+      normalizedType.includes('武器') ||
+      normalizedType.includes('무기')
+    ) {
+      return 'weapon';
+    }
+    if (
+      normalizedType.includes('character') ||
+      normalizedType.includes('персона') ||
+      normalizedType.includes('角色') ||
+      normalizedType.includes('캐릭')
+    ) {
+      return 'character';
+    }
+
+    if (weaponNameLookup[normalizedName]) return 'weapon';
+    if (characterNameLookup[normalizedName]) return 'character';
+    return null;
+  }
+
+  function resolveWishId(type, name) {
+    const normalizedName = normalizeWishText(name);
+    if (!normalizedName) return null;
+    if (type === 'weapon') return weaponNameLookup[normalizedName] || null;
+    if (type === 'character') return characterNameLookup[normalizedName] || null;
+    return null;
+  }
+
+  function appendWishRow(row, newestPullTimeMap) {
+    const code = String(row?.gacha_type || '');
+    if (!types[code]) return;
+
+    const time = row?.time;
+    if (typeof time !== 'string' || time.length === 0) return;
+
+    if (currentUID !== '' && currentUID !== String(row.uid || '')) {
+      throw 'account error';
+    }
+    currentUID = String(row.uid || currentUID);
+
+    const newestPullTime = newestPullTimeMap?.[code] || dayjs().year(2000);
+    if (dayjs(time).isSameOrBefore(newestPullTime)) return;
+
+    const wishType = detectWishType(row.item_type, row.name);
+    if (!wishType) return;
+
+    const id = resolveWishId(wishType, row.name);
+    if (!id) return;
+
+    if (wishes[code] === undefined) {
+      wishes[code] = [];
+    }
+
+    wishes[code] = [
+      ...wishes[code],
+      {
+        type: wishType,
+        id,
+        time,
+        pity: 0,
+      },
+    ];
+  }
+
+  function extractWishRows(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data?.list)) return payload.data.list;
+    if (Array.isArray(payload?.list)) return payload.list;
+    return [];
+  }
+
+  async function importFromWishJsonLink(link) {
+    await checkUID();
+    fetchingWishes = true;
+    currentBanner = 'JSON';
+    currentPage = 1;
+
+    const newestPullTimeMap = {};
+    for (const [wishNumber, type] of Object.entries(types)) {
+      newestPullTimeMap[wishNumber] = await getNewestPullTime(type);
+    }
+
+    const response = await fetchRetry(link, { signal: fetchSignal }, 2);
+    if (!response.ok) {
       processingLog = false;
-      fetchingWishes = false;
-      finishedProcessingLog = false;
-      calculatingPity = false;
+      pushToast($t('wish.import.timeout'), 'error');
+      throw 'network error';
+    }
 
-      region = '';
-      currentBanner = '';
-      currentPage = 1;
+    const payload = await response.json();
+    if (Number(payload?.retcode) !== 0 && payload?.retcode !== undefined) {
+      processingLog = false;
+      pushToast($t('wish.import.invalidData'), 'error');
+      throw 'invalid data';
+    }
+
+    const rows = extractWishRows(payload);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      processingLog = false;
+      pushToast($t('wish.import.invalidData'), 'error');
+      throw 'invalid data';
+    }
+
+    for (const row of rows) {
+      appendWishRow(row, newestPullTimeMap);
+    }
+
+    for (const code of Object.keys(wishes)) {
+      wishes[code] = wishes[code]
+        .slice()
+        .sort((a, b) => dayjs(b.time).valueOf() - dayjs(a.time).valueOf());
     }
   }
 
@@ -171,9 +356,6 @@
 
     currentBanner = type.name;
 
-    const weapons = Object.values(weaponList);
-    const chars = Object.values(characters);
-
     const newestPullTime = await getNewestPullTime(type);
     // console.log(newestPullTime);
     let page = 1;
@@ -190,7 +372,7 @@
 
       try {
         const res = await fetchRetry(
-          `${import.meta.env.VITE_API_HOST}/corsproxy`,
+          getCorsProxyUrl(),
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -234,43 +416,10 @@
 
       try {
         for (let row of result) {
-          const code = row.gacha_type;
-          const time = row.time;
-          const name = row.name;
-          const type = row.item_type.replace(/ /g, '');
-
-          if (currentUID !== '' && currentUID !== row.uid) {
-            throw 'account error';
+          appendWishRow(row, { [wishNumber]: newestPullTime });
+          if (typeof row?.time === 'string' && row.time.length > 0) {
+            lastTime = dayjs(row.time);
           }
-
-          currentUID = row.uid.toString();
-
-          if (dayjs(time).isSameOrBefore(newestPullTime)) {
-            return;
-          }
-
-          lastTime = dayjs(time);
-
-          let id;
-          if (type === 'Weapon') {
-            id = weapons.find((e) => e.name === name).id;
-          } else if (type === 'Character') {
-            id = chars.find((e) => e.name === name).id;
-          }
-
-          if (wishes[code] === undefined) {
-            wishes[code] = [];
-          }
-
-          wishes[code] = [
-            ...wishes[code],
-            {
-              type: type.toLowerCase(),
-              id,
-              time,
-              pity: 0,
-            },
-          ];
         }
 
         page = page + 1;
@@ -365,9 +514,6 @@
 
     const rows = generatedTextInput.substring(30).split('\n');
 
-    const weapons = Object.values(weaponList);
-    const chars = Object.values(characters);
-
     try {
       for (let row of rows) {
         if (row === '') continue;
@@ -376,33 +522,22 @@
         const code = Number(cell[0]);
         const time = cell[1];
         const name = cell[2];
-        const type = cell[3].replace(/ /g, '');
 
         const newestPullTime = await getNewestPullTime(types[code]);
         if (dayjs(time).isSameOrBefore(newestPullTime)) {
           continue;
         }
 
-        let id;
-        if (type === 'Weapon') {
-          id = weapons.find((e) => e.name === name).id;
-        } else if (type === 'Character') {
-          id = chars.find((e) => e.name === name).id;
-        }
-
-        if (wishes[code] === undefined) {
-          wishes[code] = [];
-        }
-
-        wishes[code] = [
-          ...wishes[code],
+        appendWishRow(
           {
-            type: type.toLowerCase(),
-            id,
+            gacha_type: String(code),
             time,
-            pity: 0,
+            name,
+            item_type: cell[3],
+            uid: currentUID,
           },
-        ];
+          { [String(code)]: newestPullTime },
+        );
       }
     } catch (err) {
       processingLog = false;
@@ -512,7 +647,10 @@
   onMount(() => {
     detectPlatform();
     selectedServer = servers.find((e) => e.value === $server);
+    buildWishNameLookups();
   });
+
+  $: $t, buildWishNameLookups();
 </script>
 
 {#if processingLog}

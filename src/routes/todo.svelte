@@ -14,6 +14,7 @@
   import { getCurrentDay } from '../stores/server';
   import { itemGroup } from '../data/itemGroup';
   import { dropRates } from '../data/dropRates';
+  import { adjustMaterialAmount, materialInventory } from '../stores/materialInventory';
 
   const { open: openModal, close: closeModal } = getContext('simple-modal');
 
@@ -25,10 +26,10 @@
   let refreshLayout;
   let columnCount = 1;
   let numberFormat = Intl.NumberFormat();
-  let adding = false;
   let isSunday = false;
   let today = getCurrentDay();
   let summary = {};
+  let requiredSummary = {};
   let todayOnlyItems = {};
   let resin = 0;
   let resinDetail = {};
@@ -106,38 +107,34 @@
     );
   }
 
-  function decrease(key, val) {
-    todos.update((n) => {
-      let i = 0;
-      let leftover = val;
-      for (const current of n) {
-        const remaining = current.resources[key];
-        if (remaining !== undefined && remaining > 0) {
-          const reducedBy = Math.min(val, leftover, remaining);
+  function getInventoryAmount(id) {
+    return Math.max(0, Number($materialInventory[id]?.amount) || 0);
+  }
 
-          n[i].resources[key] -= reducedBy;
-          leftover -= reducedBy;
+  function changeInventory(id, delta) {
+    adjustMaterialAmount(id, delta);
+  }
 
-          if (leftover === 0) break;
-        }
-        i++;
-      }
+  function getRemainingAmount(id) {
+    return Math.max(0, Number(summary[id]) || 0);
+  }
 
-      return n;
-    });
+  function isCompleted(id) {
+    return getRemainingAmount(id) === 0;
+  }
+
+  function sortByCompletionThenAmount(a, b) {
+    const aDone = isCompleted(a[0]);
+    const bDone = isCompleted(b[0]);
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    return b[1] - a[1];
   }
 
   async function updateSummary() {
     const todayOnly = {};
-    summary = $todos.reduce((prev, current) => {
+    const required = $todos.reduce((prev, current) => {
       for (const [id, amount] of Object.entries(current.resources)) {
-        if (!isSunday && itemList[id].day && itemList[id].day.includes(today)) {
-          if (todayOnly[id] === undefined) {
-            todayOnly[id] = 0;
-          }
-          todayOnly[id] += amount;
-        }
-
+        if (!itemList[id]) continue;
         if (prev[id] === undefined) {
           prev[id] = 0;
         }
@@ -147,6 +144,17 @@
 
       return prev;
     }, {});
+    requiredSummary = required;
+
+    summary = {};
+    for (const [id, amount] of Object.entries(required)) {
+      const remaining = Math.max(0, amount - getInventoryAmount(id));
+      summary[id] = remaining;
+
+      if (!isSunday && itemList[id] && itemList[id].day && itemList[id].day.includes(today)) {
+        todayOnly[id] = remaining;
+      }
+    }
     todayOnlyItems = todayOnly;
 
     id = Math.random();
@@ -165,6 +173,7 @@
     resinDetail = {};
 
     for (const [id, amount] of Object.entries(summary)) {
+      if (!itemList[id]) continue;
       if (itemGroup[id] && itemGroup[id].type === 'book') {
         if (books[id] === undefined) {
           books[id] = [0, 0, 0];
@@ -273,7 +282,7 @@
     id = Math.random();
   });
 
-  $: $todos, updateSummary();
+  $: $todos, $materialInventory, updateSummary();
   $: columnCount, updateId();
 </script>
 
@@ -384,16 +393,16 @@
         </div>
       {/if}
       <table class="w-full">
-        {#each Object.entries(summary) as [id, amount]}
+        {#each Object.entries(requiredSummary).sort(sortByCompletionThenAmount) as [id, amount]}
           <tr>
             <td class="text-right border-b border-gray-700 py-1">
-              <span class={`${amount === 0 ? 'line-through text-gray-600' : 'text-white'} mr-2 whitespace-nowrap`}>
+              <span class={`${isCompleted(id) ? 'line-through text-gray-600' : 'text-white'} mr-2 whitespace-nowrap`}>
                 {numberFormat.format(amount)}
                 <Icon size={0.5} path={mdiClose} /></span
               >
             </td>
             <td class="border-b border-gray-700 py-1">
-              <span class={`${amount === 0 ? 'line-through text-gray-600' : 'text-white'} block mb-1`}>
+              <span class={`${isCompleted(id) ? 'line-through text-gray-600' : 'text-white'} block mb-1`}>
                 <span class="w-6 inline-block">
                   <img
                     class="h-6 inline-block mr-1"
@@ -403,26 +412,33 @@
                 </span>
                 {$t(itemList[id].name)}
               </span>
+              <p class="text-xs text-gray-500 mb-1">{$t('todo.inInventory')}: {numberFormat.format(getInventoryAmount(id))}</p>
               {#if id === 'mora'}
-                <Button size="sm" disabled={amount === 0 && !adding} on:click={() => decrease(id, 1000)}>
-                  {adding ? '+' : '-'}1000
+                <Button size="sm" disabled={getInventoryAmount(id) < 1000} on:click={() => changeInventory(id, -1000)}>
+                  -1000
                 </Button>
-                <Button size="sm" disabled={amount === 0 && !adding} on:click={() => decrease(id, 10000)}>
-                  {adding ? '+' : '-'}10000
+                <Button size="sm" on:click={() => changeInventory(id, 1000)}>+1000</Button>
+                <Button size="sm" disabled={getInventoryAmount(id) < 10000} on:click={() => changeInventory(id, -10000)}>
+                  -10000
                 </Button>
-                <Button size="sm" disabled={amount === 0 && !adding} on:click={() => decrease(id, 50000)}>
-                  {adding ? '+' : '-'}50000
+                <Button size="sm" on:click={() => changeInventory(id, 10000)}>+10000</Button>
+                <Button size="sm" disabled={getInventoryAmount(id) < 50000} on:click={() => changeInventory(id, -50000)}>
+                  -50000
                 </Button>
+                <Button size="sm" on:click={() => changeInventory(id, 50000)}>+50000</Button>
               {:else}
-                <Button size="sm" disabled={amount === 0 && !adding} className="w-10" on:click={() => decrease(id, 1)}>
-                  {adding ? '+' : '-'}1
+                <Button size="sm" disabled={getInventoryAmount(id) < 1} className="w-10" on:click={() => changeInventory(id, -1)}>
+                  -1
                 </Button>
-                <Button size="sm" disabled={amount === 0 && !adding} className="w-10" on:click={() => decrease(id, 5)}>
-                  {adding ? '+' : '-'}5
+                <Button size="sm" className="w-10" on:click={() => changeInventory(id, 1)}>+1</Button>
+                <Button size="sm" disabled={getInventoryAmount(id) < 5} className="w-10" on:click={() => changeInventory(id, -5)}>
+                  -5
                 </Button>
-                <Button size="sm" disabled={amount === 0 && !adding} className="w-10" on:click={() => decrease(id, 10)}>
-                  {adding ? '+' : '-'}10
+                <Button size="sm" className="w-10" on:click={() => changeInventory(id, 5)}>+5</Button>
+                <Button size="sm" disabled={getInventoryAmount(id) < 10} className="w-10" on:click={() => changeInventory(id, -10)}>
+                  -10
                 </Button>
+                <Button size="sm" className="w-10" on:click={() => changeInventory(id, 10)}>+10</Button>
               {/if}
             </td>
           </tr>
@@ -473,16 +489,16 @@
           </Button>
         </div>
         <table class="w-full">
-          {#each Object.entries(todo.resources).sort((a, b) => b[1] - a[1]) as [id, amount]}
+          {#each Object.entries(todo.resources).sort(sortByCompletionThenAmount) as [id, amount]}
             <tr>
               <td class="text-right border-b border-gray-700 py-1">
-                <span class={`${amount === 0 ? 'line-through text-gray-600' : 'text-white'} mr-2 whitespace-nowrap`}>
+                <span class={`${isCompleted(id) ? 'line-through text-gray-600' : 'text-white'} mr-2 whitespace-nowrap`}>
                   {numberFormat.format(amount)}
                   <Icon size={0.5} path={mdiClose} /></span
                 >
               </td>
               <td class="border-b border-gray-700 py-1">
-                <span class={amount === 0 ? 'line-through text-gray-600' : 'text-white'}>
+                <span class={isCompleted(id) ? 'line-through text-gray-600' : 'text-white'}>
                   <span class="w-6 inline-block">
                     <img
                       class="h-6 inline-block mr-1"

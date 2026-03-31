@@ -6,6 +6,9 @@
   import Button from '../../components/Button.svelte';
   import Icon from '../../components/Icon.svelte';
   import { getLocalSaveJson, updateSave } from '../../stores/saveManager';
+  import { parseGoodLoadout } from '../../functions/goodLoadout';
+  import { parseGoodMaterials } from '../../functions/goodMaterials';
+  import { buildGoodExportFromSaveData, buildUniversalExportFromSaveData, UNIVERSAL_EXPORT_KEY } from '../../functions/goodExport';
   import { pushToast } from '../../stores/toast';
 
   let input;
@@ -14,7 +17,15 @@
   export let immediate = false;
 
   async function exportData() {
-    downloadData(await getLocalSaveJson(), 'paimon-moe-local-data');
+    const localData = JSON.parse(await getLocalSaveJson());
+    const universal = buildUniversalExportFromSaveData(localData);
+    downloadData(JSON.stringify(universal), 'paimon-moe-local-data');
+  }
+
+  async function exportGoodData() {
+    const localData = JSON.parse(await getLocalSaveJson());
+    const goodData = buildGoodExportFromSaveData(localData);
+    downloadData(JSON.stringify(goodData), 'paimon-moe-good-data');
   }
 
   function downloadData(data, name) {
@@ -30,26 +41,59 @@
   }
 
   async function importData() {
+    if (!files || !files[0]) return;
     loading = true;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const data = JSON.parse(reader.result);
+        const imported = JSON.parse(reader.result);
+        const data = { ...imported };
+
+        const universal = imported?.[UNIVERSAL_EXPORT_KEY];
+        if (universal && typeof universal === 'object') {
+          const goodPayload = universal.good;
+
+          const hasGoodInventory = data['good-inventory'] && typeof data['good-inventory'] === 'object';
+          const hasMaterialInventory = data['material-inventory'] && typeof data['material-inventory'] === 'object';
+
+          if (!hasGoodInventory && goodPayload && typeof goodPayload === 'object') {
+            const parsedLoadout = parseGoodLoadout(goodPayload);
+            if (parsedLoadout.ok) {
+              data['good-inventory'] = parsedLoadout.data;
+            }
+          }
+
+          if (!hasMaterialInventory && goodPayload && typeof goodPayload === 'object') {
+            const parsedMaterials = parseGoodMaterials(goodPayload);
+            if (parsedMaterials.ok) {
+              data['material-inventory'] = parsedMaterials.entries;
+            }
+          }
+
+          delete data[UNIVERSAL_EXPORT_KEY];
+        }
+
         await localforage.clear();
         for (const key in data) {
           await updateSave(key, data[key], true);
         }
+        pushToast($t('settings.importSuccess'));
+        setTimeout(() => {
+          window.location.reload();
+        }, 5000);
       } catch (err) {
         pushToast($t('settings.importFailed'), 'error');
+      } finally {
+        loading = false;
       }
     };
 
+    reader.onerror = () => {
+      loading = false;
+      pushToast($t('settings.importFailed'), 'error');
+    };
+
     reader.readAsText(files[0]);
-    loading = false;
-    pushToast($t('settings.importSuccess'));
-    setTimeout(() => {
-      window.location.reload();
-    }, 5000);
   }
 
   onMount(() => {
@@ -60,7 +104,10 @@
 <div class="bg-background rounded-xl p-4 mb-4">
   <p class="text-white font-bold">{$t('settings.export')}</p>
   <p class="text-gray-400 mb-2">{$t('settings.exportInfo')}</p>
-  <Button on:click={exportData}>{$t('settings.download')}</Button>
+  <div class="flex flex-wrap gap-2">
+    <Button on:click={exportData}>{$t('settings.download')}</Button>
+    <Button on:click={exportGoodData}>{$t('settings.downloadGood')}</Button>
+  </div>
 </div>
 <div class="bg-background rounded-xl p-4">
   <p class="text-white font-bold">{$t('settings.import')}</p>

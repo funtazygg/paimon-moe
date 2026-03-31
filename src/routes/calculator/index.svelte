@@ -61,11 +61,14 @@
   />
 </svelte:head>
 <div class="pt-20 lg:ml-64 lg:pt-8 px-4 md:px-8">
-  <div class="flex justify-center md:justify-start mb-4">
+  <div class="flex justify-center md:justify-start mb-4 gap-2 flex-wrap">
     <Button on:click={openHowTo}>
       <Icon size={0.8} path={mdiHelpCircle} />
       {$t('calculator.howToUse')}
     </Button>
+    <a href="/inventory">
+      <Button>{$t('inventoryPage.openButton')}</Button>
+    </a>
   </div>
   <div
     id="weapon"

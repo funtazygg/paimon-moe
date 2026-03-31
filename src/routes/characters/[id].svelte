@@ -23,6 +23,7 @@
   import Button from '../../components/Button.svelte';
   import Tooltip from '../../components/TooltipRelative.svelte';
   import { getAccountPrefix } from '../../stores/account';
+  import { goodInventory } from '../../stores/goodInventory';
   import { readSave, updateSave } from '../../stores/saveManager';
   import { characters } from '../../data/characters';
   import { itemGroup } from '../../data/itemGroup';
@@ -123,6 +124,90 @@
   const showedIndex = [1, 20, 21, 41, 42, 52, 53, 63, 64, 74, 75, 85, 86, 96, 101, 106];
   const level = [1, 20, 20, 40, 40, 50, 50, 60, 60, 70, 70, 80, 80, 90, 95, 100];
   const ascen = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6];
+  const artifactSlotOrder = ['flower', 'plume', 'sands', 'goblet', 'circlet'];
+  const artifactSlotLabel = {
+    flower: 'Flower',
+    plume: 'Plume',
+    sands: 'Sands',
+    goblet: 'Goblet',
+    circlet: 'Circlet',
+  };
+  const goodStatLabels = {
+    hp: 'characters.hp',
+    atk: 'characters.atk',
+    def: 'characters.def',
+    hp_: 'characters.hpPercent',
+    atk_: 'characters.atkPercent',
+    def_: 'characters.defPercent',
+    eleMas: 'characters.em',
+    enerRech_: 'characters.er',
+    critRate_: 'characters.critRate',
+    critDMG_: 'characters.critDamage',
+    heal_: 'characters.healingBonus',
+    pyro_dmg_: 'characters.pyroDamageBonus',
+    hydro_dmg_: 'characters.hydroDamageBonus',
+    dendro_dmg_: 'characters.dendroDamageBonus',
+    electro_dmg_: 'characters.electroDamageBonus',
+    cryo_dmg_: 'characters.cryoDamageBonus',
+    anemo_dmg_: 'characters.anemoDamageBonus',
+    geo_dmg_: 'characters.geoDamageBonus',
+    physical_dmg_: 'characters.physicalDamageBonus',
+  };
+  const goodPercentStatKeys = new Set([
+    'hp_',
+    'atk_',
+    'def_',
+    'enerRech_',
+    'critRate_',
+    'critDMG_',
+    'heal_',
+    'pyro_dmg_',
+    'hydro_dmg_',
+    'dendro_dmg_',
+    'electro_dmg_',
+    'cryo_dmg_',
+    'anemo_dmg_',
+    'geo_dmg_',
+    'physical_dmg_',
+  ]);
+
+  function fallbackArtifactImage(event) {
+    if (event?.currentTarget) {
+      event.currentTarget.src = '/images/artifacts/adventurer_flower.png';
+    }
+  }
+
+  function fallbackWeaponImage(event) {
+    if (event?.currentTarget) {
+      event.currentTarget.src = '/images/weapons/any_weapon_1.png';
+    }
+  }
+
+  function toReadableKey(value) {
+    if (typeof value !== 'string') return '';
+    return value
+      .replace(/_/g, ' ')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  }
+
+  function getGoodStatLabel(key) {
+    if (goodStatLabels[key]) {
+      return $t(goodStatLabels[key]);
+    }
+
+    return toReadableKey(key);
+  }
+
+  function formatGoodStatValue(key, value) {
+    if (!Number.isFinite(Number(value))) return '-';
+    const numeric = Number(value);
+    if (goodPercentStatKeys.has(key)) {
+      return `${numberFormat.format(numeric)}%`;
+    }
+    return numberFormat.format(numeric);
+  }
 
   async function getConstellationCount() {
     const prefix = getAccountPrefix();
@@ -249,6 +334,60 @@
   });
 
   $: constellationCountTotal = constellationCount + manualCount;
+  $: currentGoodCharacter = $goodInventory?.characters?.[id] || null;
+  $: goodWeapon = currentGoodCharacter?.weapon || null;
+  $: goodArtifacts = artifactSlotOrder.map((slotKey) => {
+    const artifact = currentGoodCharacter?.artifacts?.[slotKey] || null;
+    return {
+      slotKey,
+      slotLabel: artifactSlotLabel[slotKey] || slotKey,
+      artifact,
+    };
+  });
+  $: goodArtifactSetCounts = goodArtifacts.reduce((prev, entry) => {
+    if (!entry.artifact?.setName) return prev;
+    const setId = entry.artifact.setId || entry.artifact.setKey || entry.artifact.setName;
+    if (!prev[setId]) {
+      prev[setId] = {
+        id: setId,
+        name: entry.artifact.setName,
+        count: 0,
+      };
+    }
+    prev[setId].count += 1;
+    return prev;
+  }, {});
+  $: goodArtifactSets = Object.values(goodArtifactSetCounts).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  $: goodSubstatTotals = goodArtifacts.reduce((prev, entry) => {
+    if (!entry.artifact?.substats) return prev;
+    for (const stat of entry.artifact.substats) {
+      if (!stat || typeof stat.key !== 'string') continue;
+      const numeric = Number(stat.value);
+      if (!Number.isFinite(numeric)) continue;
+      if (prev[stat.key] === undefined) prev[stat.key] = 0;
+      prev[stat.key] += numeric;
+    }
+    return prev;
+  }, {});
+  $: goodSubstats = Object.entries(goodSubstatTotals)
+    .sort((a, b) => {
+      const aPercent = goodPercentStatKeys.has(a[0]);
+      const bPercent = goodPercentStatKeys.has(b[0]);
+      if (aPercent !== bPercent) return aPercent ? -1 : 1;
+      return Math.abs(b[1]) - Math.abs(a[1]);
+    })
+    .map(([key, value]) => ({
+      key,
+      label: getGoodStatLabel(key),
+      value: formatGoodStatValue(key, value),
+    }));
+  $: hasGoodLoadout = Boolean(
+    currentGoodCharacter &&
+      (goodWeapon ||
+        goodArtifacts.some((entry) => entry.artifact) ||
+        Number.isFinite(Number(currentGoodCharacter.level)) ||
+        Number.isFinite(Number(currentGoodCharacter.constellation))),
+  );
   $: buildName = builds ? builds[currentBuild].name : '';
   $: build = builds ? builds[currentBuild].build : '';
 </script>
@@ -381,97 +520,121 @@
             </div>
           </div>
         </div>
-        <div class="md:ml-4 mt-4 block overflow-x-auto whitespace-nowrap w-screen 2xl:w-auto max-w-full">
-          <div class="px-4" style="width: min-content;">
-            <div class="table max-w-full rounded-xl border border-gray-200 border-opacity-25">
-              <table class="text-gray-200 w-full">
-                <tr>
-                  <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
-                    {$t('characters.asc')}
-                  </td>
-                  <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
-                    {$t('characters.lvl')}
-                  </td>
-                  <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
-                    {$t('characters.hp')}
-                  </td>
-                  <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
-                    {$t('characters.atk')}
-                  </td>
-                  <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
-                    {$t('characters.def')}
-                  </td>
-                  <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
-                    {$t(`characters.${data.statGrow}`)}
-                  </td>
-                  <td class="text-center whitespace-nowrap border-gray-700 font-semibold px-2">
-                    {$t('characters.ascensionMaterial')}
-                  </td>
-                </tr>
-                {#each showedIndex as index, i}
-                  <tr>
-                    {#if i % 2 === 0 && i < 14}
-                      <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
-                        {ascen[i]}
-                      </td>
-                    {/if}
-                    <td class="text-center border-t border-gray-700 border-r px-2 h-8">{level[i]}</td>
-                    <td class="text-center border-t border-gray-700 border-r px-2">{Math.round(data.hp[index])}</td>
-                    <td class="text-center border-t border-gray-700 border-r px-2">{Math.round(data.atk[index])}</td>
-                    <td class="text-center border-t border-gray-700 border-r px-2">{Math.round(data.def[index])}</td>
-                    {#if i % 2 === 0 && i < 14}
-                      {#if data.statGrow === 'critRate'}
-                        <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
-                          {numberFormat.format(data.critRate[index] * 100)}%
-                        </td>
-                      {/if}
-                      {#if data.statGrow === 'critDamage'}
-                        <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
-                          {numberFormat.format(data.critDamage[index] * 100)}%
-                        </td>
-                      {/if}
-                      {#if data.statGrow !== 'critRate' && data.statGrow !== 'critDamage' && data.statGrow !== 'em'}
-                        <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
-                          {numberFormat.format(data[data.statGrow][index] * 100)}%
-                        </td>
-                      {:else if data.statGrow === 'em'}
-                        <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
-                          {numberFormat.format(data[data.statGrow][index])}
-                        </td>
-                      {/if}
-                    {/if}
-                    {#if i % 2 === 0 && i < 14}
-                      <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 px-2">
-                        <span class="w-max inline-block h-16">
-                          {#if ascen[i] > 0}
-                            {#each ascMaterials[ascen[i - 1]].items as obj}
-                              {#if obj.item.id !== 'none'}
-                                <Tooltip title={$t(obj.item.name)}>
-                                  <span class="mr-2 bg-background rounded-xl">
-                                    <span class="w-8 h-8 inline-block">
-                                      <img
-                                        src="/images/items/{obj.item.id}.png"
-                                        alt={obj.item.name}
-                                        class="inline h-full"
-                                      />
-                                    </span>
-                                    <Icon size={0.5} path={mdiClose} /><span>{obj.amount}</span>
-                                  </span>
-                                </Tooltip>
+        <div class="mt-4 px-4 md:px-8 w-full">
+          <div class="bg-item rounded-xl border border-gray-200 border-opacity-25 p-4 text-white">
+            {#if hasGoodLoadout}
+              <div class="flex flex-col xl:flex-row xl:items-start xl:space-x-4 space-y-4 xl:space-y-0">
+                <div class="xl:w-1/3">
+                  <p class="font-bold">Imported Build (GOOD)</p>
+                  <p class="text-gray-300 text-sm mt-1">
+                    Lv.{currentGoodCharacter.level} · Asc {currentGoodCharacter.ascension} · C{currentGoodCharacter.constellation}
+                  </p>
+                  <p class="text-gray-300 text-sm">
+                    Talents: {currentGoodCharacter.talent.auto}/{currentGoodCharacter.talent.skill}/{currentGoodCharacter.talent.burst}
+                  </p>
+
+                  {#if goodWeapon}
+                    <div class="mt-3 p-3 rounded-lg bg-background bg-opacity-60">
+                      <p class="text-gray-300 text-sm">Weapon</p>
+                      <div class="flex items-center mt-2">
+                        <img
+                          src="/images/weapons/{goodWeapon.id}.png"
+                          alt={goodWeapon.name}
+                          class="w-12 h-12 object-contain mr-3"
+                          on:error={fallbackWeaponImage}
+                        />
+                        <div class="min-w-0">
+                          <p class="font-semibold truncate">
+                            {goodWeapon.id && weapons[goodWeapon.id] ? weapons[goodWeapon.id].name : goodWeapon.name}
+                          </p>
+                          <p class="text-xs text-gray-300">Lv.{goodWeapon.level} · R{goodWeapon.refinement}</p>
+                          <p class="text-xs text-gray-300">
+                            {$t('weapon.baseAtk')}: {goodWeapon.atk ?? '-'}
+                            {#if goodWeapon.secondaryName && goodWeapon.secondaryValue !== null}
+                              · {$t(`weapon.${goodWeapon.secondaryName}`)}:
+                              {formatStat(goodWeapon.secondaryValue, goodWeapon.secondaryName)}
+                            {/if}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if goodArtifactSets.length > 0}
+                    <div class="mt-3 p-3 rounded-lg bg-background bg-opacity-60">
+                      <p class="text-gray-300 text-sm">Artifact Sets</p>
+                      {#each goodArtifactSets as setInfo}
+                        <p class="text-sm mt-1">
+                          {setInfo.id && artifacts[setInfo.id] ? artifacts[setInfo.id].name : setInfo.name} ({setInfo.count})
+                        </p>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+
+                <div class="xl:w-2/3">
+                  <p class="font-bold">Artifacts</p>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                    {#each goodArtifacts as entry}
+                      <div class="p-2 rounded-lg bg-background bg-opacity-60">
+                        <p class="text-xs text-gray-300 uppercase">{entry.slotLabel}</p>
+                        {#if entry.artifact}
+                          <div class="flex items-start mt-1">
+                            <img
+                              src="/images/artifacts/{entry.artifact.setId || 'adventurer'}_{entry.slotKey}.png"
+                              alt={entry.artifact.setName}
+                              class="w-10 h-10 mr-2 object-contain"
+                              on:error={fallbackArtifactImage}
+                            />
+                            <div class="min-w-0">
+                              <p class="text-sm break-words leading-tight">
+                                {entry.artifact.setId && artifacts[entry.artifact.setId]
+                                  ? artifacts[entry.artifact.setId].name
+                                  : entry.artifact.setName}
+                              </p>
+                              <p class="text-xs text-gray-300">
+                                +{entry.artifact.level} · {getGoodStatLabel(entry.artifact.mainStatKey)}
+                              </p>
+                              {#if entry.artifact.substats.length > 0}
+                                <div class="mt-1 space-y-1">
+                                  {#each entry.artifact.substats as stat}
+                                    <p class="text-xs text-gray-300 break-words leading-tight">
+                                      {getGoodStatLabel(stat.key)} {formatGoodStatValue(stat.key, stat.value)}
+                                    </p>
+                                  {/each}
+                                </div>
                               {/if}
-                            {/each}
-                            <span class="pt-1 block">
-                              <img src="/images/mora.png" alt="mora" class="inline w-6 h-6" />
-                              <span>{numberFormat.format(ascMaterials[ascen[i - 1]].mora)}</span>
-                            </span>
-                          {/if}
-                        </span>
-                      </td>
+                            </div>
+                          </div>
+                        {:else}
+                          <p class="text-xs text-gray-400 mt-1">Empty</p>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+
+                  <div class="mt-3 p-3 rounded-lg bg-background bg-opacity-60">
+                    <p class="text-gray-300 text-sm">Artifact Substats Total</p>
+                    {#if goodSubstats.length > 0}
+                      <div class="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1 mt-1">
+                        {#each goodSubstats as stat}
+                          <p class="text-xs">
+                            <span class="text-gray-300">{stat.label}:</span>
+                            <span class="ml-1">{stat.value}</span>
+                          </p>
+                        {/each}
+                      </div>
+                    {:else}
+                      <p class="text-xs text-gray-400 mt-1">No artifact substats found.</p>
                     {/if}
-                  </tr>
-                {/each}
-              </table>
-            </div>
+                  </div>
+                </div>
+              </div>
+            {:else}
+              <p class="text-gray-300 text-sm">
+                Import your GOOD file in Inventory to see equipped weapon, artifacts, and stats summary here.
+              </p>
+            {/if}
           </div>
         </div>
         <div class="flex mt-4 mx-4 md:mx-8">
@@ -886,6 +1049,95 @@
       {$t('characters.source')}
     </a>
   {/if}
+  <div class="md:ml-4 mt-4 block overflow-x-auto whitespace-nowrap w-full max-w-full">
+    <div class="px-4">
+      <div class="table max-w-full rounded-xl border border-gray-200 border-opacity-25">
+        <table class="text-gray-200 w-full">
+          <tr>
+            <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
+              {$t('characters.asc')}
+            </td>
+            <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
+              {$t('characters.lvl')}
+            </td>
+            <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
+              {$t('characters.hp')}
+            </td>
+            <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
+              {$t('characters.atk')}
+            </td>
+            <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
+              {$t('characters.def')}
+            </td>
+            <td class="text-center whitespace-nowrap border-gray-700 border-r font-semibold px-2">
+              {$t(`characters.${data.statGrow}`)}
+            </td>
+            <td class="text-center whitespace-nowrap border-gray-700 font-semibold px-2">
+              {$t('characters.ascensionMaterial')}
+            </td>
+          </tr>
+          {#each showedIndex as index, i}
+            <tr>
+              {#if i % 2 === 0 && i < 14}
+                <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
+                  {ascen[i]}
+                </td>
+              {/if}
+              <td class="text-center border-t border-gray-700 border-r px-2 h-8">{level[i]}</td>
+              <td class="text-center border-t border-gray-700 border-r px-2">{Math.round(data.hp[index])}</td>
+              <td class="text-center border-t border-gray-700 border-r px-2">{Math.round(data.atk[index])}</td>
+              <td class="text-center border-t border-gray-700 border-r px-2">{Math.round(data.def[index])}</td>
+              {#if i % 2 === 0 && i < 14}
+                {#if data.statGrow === 'critRate'}
+                  <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
+                    {numberFormat.format(data.critRate[index] * 100)}%
+                  </td>
+                {/if}
+                {#if data.statGrow === 'critDamage'}
+                  <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
+                    {numberFormat.format(data.critDamage[index] * 100)}%
+                  </td>
+                {/if}
+                {#if data.statGrow !== 'critRate' && data.statGrow !== 'critDamage' && data.statGrow !== 'em'}
+                  <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
+                    {numberFormat.format(data[data.statGrow][index] * 100)}%
+                  </td>
+                {:else if data.statGrow === 'em'}
+                  <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 border-r px-2">
+                    {numberFormat.format(data[data.statGrow][index])}
+                  </td>
+                {/if}
+              {/if}
+              {#if i % 2 === 0 && i < 14}
+                <td rowspan={i === 12 ? 4 : 2} class="text-center border-t border-gray-700 px-2">
+                  <span class="w-max inline-block h-16">
+                    {#if ascen[i] > 0}
+                      {#each ascMaterials[ascen[i - 1]].items as obj}
+                        {#if obj.item.id !== 'none'}
+                          <Tooltip title={$t(obj.item.name)}>
+                            <span class="mr-2 bg-background rounded-xl">
+                              <span class="w-8 h-8 inline-block">
+                                <img src="/images/items/{obj.item.id}.png" alt={obj.item.name} class="inline h-full" />
+                              </span>
+                              <Icon size={0.5} path={mdiClose} /><span>{obj.amount}</span>
+                            </span>
+                          </Tooltip>
+                        {/if}
+                      {/each}
+                      <span class="pt-1 block">
+                        <img src="/images/mora.png" alt="mora" class="inline w-6 h-6" />
+                        <span>{numberFormat.format(ascMaterials[ascen[i - 1]].mora)}</span>
+                      </span>
+                    {/if}
+                  </span>
+                </td>
+              {/if}
+            </tr>
+          {/each}
+        </table>
+      </div>
+    </div>
+  </div>
   <Ad class="mt-2 max-w-screen-2xl flex justify-center" type="desktop" variant="lb" id="2" />
   <Ad type="mobile" variant="lb" id="2" />
   <div class="flex flex-col mt-4 text-white px-4 md:px-8 max-w-screen-2xl" bind:this={talentDiv}>

@@ -7,6 +7,7 @@
   export let showConstellation;
   export let constellation;
   export let name;
+  export let profile = null;
 
   let nameLabel;
   let smallName;
@@ -24,6 +25,10 @@
   });
 
   $: name, adjustNameSize();
+  $: talentLabel = profile?.talent
+    ? `${profile.talent.auto || 1}/${profile.talent.skill || 1}/${profile.talent.burst || 1}`
+    : '-';
+  $: levelLabel = profile ? `Lv.${profile.level || 1} / A${profile.ascension || 0}` : '-';
 </script>
 
 <a
@@ -63,11 +68,12 @@
     {/if}
     <img class="w-4 h-4" src={`/images/elements/${char.element.id}.png`} alt={char.element.name} />
   </div>
-  <div class="relative overflow-hidden bg-item rounded-b-xl" style="height: 29px">
-    <div class="w-full overflow-hidden absolute bottom-0">
+  <div class="relative overflow-hidden bg-item rounded-b-xl px-1 pb-1" style="height: 54px">
+    <div class="w-full overflow-hidden absolute bottom-0 left-0 right-0">
       <p class="text-white p-1 text-center text-sm {smallName ? 'small' : ''}" bind:this={nameLabel}>
         {name}
       </p>
+      <p class="text-gray-400 text-xs text-center leading-tight pb-1">{levelLabel} · {talentLabel}</p>
     </div>
   </div>
 </a>

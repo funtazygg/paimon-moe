@@ -14,7 +14,7 @@
   import Ad from '../../components/Ad.svelte';
 
   import CharacterGridItem from './_characterGridItem.svelte';
-  import { key } from 'localforage';
+  import { goodInventory } from '../../stores/goodInventory';
 
   const sortOptions = [
     { label: $t('characters.name'), value: 'name' },
@@ -51,6 +51,23 @@
     4: true,
     5: true,
   };
+
+  function getCharacterProfile(id) {
+    if (!$goodInventory?.characters) return null;
+    return $goodInventory.characters[id] || null;
+  }
+
+  function formatTalentSummary(profile) {
+    if (!profile?.talent) return '-';
+    return `${profile.talent.auto || 1}/${profile.talent.skill || 1}/${profile.talent.burst || 1}`;
+  }
+
+  function formatCharacterLevel(profile) {
+    if (!profile) return '-';
+    const level = Number(profile.level) || 1;
+    const ascension = Number(profile.ascension) || 0;
+    return `Lv.${level} / A${ascension}`;
+  }
 
   $: chars = Object.entries(characters)
     .filter((e) => elementFilter[e[1].element.id] && weaponFilter[e[1].weapon.id] && rarityFilter[e[1].rarity])
@@ -475,7 +492,14 @@
         </div>
         <div class="px-4 md:pl-6 md:pr-4 flex flex-wrap max-w-screen-xl mt-2">
           {#each chars as [id, char] (id)}
-            <CharacterGridItem {id} {char} {showConstellation} constellation={constellation[id]} name={$t(char.name)} />
+            <CharacterGridItem
+              {id}
+              {char}
+              {showConstellation}
+              constellation={constellation[id]}
+              name={$t(char.name)}
+              profile={getCharacterProfile(id)}
+            />
           {/each}
         </div>
         {#if showConstellation}
@@ -506,6 +530,8 @@
             <TableHeader on:click={() => sort('element')} sort={sortBy === 'element'} order={sortOrder} align="center">
               {$t('characters.element')}
             </TableHeader>
+            <TableHeader align="center">{$t('characters.lvl')}</TableHeader>
+            <TableHeader align="center">{$t('characters.talents')}</TableHeader>
             <TableHeader
               on:click={() => sort('constellation')}
               sort={sortBy === 'constellation'}
@@ -532,6 +558,7 @@
           </thead>
           <tbody>
             {#each chars as [id, char] (id)}
+              {@const profile = getCharacterProfile(id)}
               <tr class={`rounded cursor-pointer ${char.rarity === 4 ? 'rare' : 'legendary'}`}>
                 <td class="rarity w-16 sticky" style="padding: 0; left: 0px;">
                   <img class="w-12 h-12 rounded-full" src={`/images/characters/${id}.png`} alt={char.name} />
@@ -540,6 +567,8 @@
                 <td class="text-center">
                   <img class="w-8 h-8 inline" src={`/images/elements/${char.element.id}.png`} alt={char.element.name} />
                 </td>
+                <td class="text-center">{formatCharacterLevel(profile)}</td>
+                <td class="text-center">{formatTalentSummary(profile)}</td>
                 <td class="text-center">
                   {constellation[id]
                     ? `C${Math.max(
